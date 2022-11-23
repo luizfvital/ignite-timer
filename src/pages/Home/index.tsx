@@ -3,13 +3,14 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { differenceInSeconds } from 'date-fns'
 import * as zod from 'zod'
-import { Play } from 'phosphor-react'
+import { Play, HandPalm } from 'phosphor-react'
 import {
   HomeContainer,
   FormContainer,
   CountdownContainer,
   Separator,
   StartCountdownButton,
+  StopCountdownButton,
   TaskInput,
   MinutesAmountInput,
 } from './styles'
@@ -34,6 +35,8 @@ interface Cycle {
   task: string
   minutes: number
   startDate: Date
+  interruptedDate?: Date
+  finishedDate?: Date
 }
 
 export function Home() {
@@ -61,8 +64,26 @@ export function Home() {
 
     setCycles((currentCycles) => [...currentCycles, newCycle])
     setActiveCycleId(id)
+    setTotalSecondsPassed(0)
 
     reset()
+  }
+
+  function handleInterruptCycle() {
+    setCycles((state) =>
+      state.map((cycle) => {
+        if (cycle.id === activeCycleId) {
+          return {
+            ...cycle,
+            interruptedDate: new Date(),
+          }
+        } else {
+          return cycle
+        }
+      }),
+    )
+
+    setActiveCycleId(null)
   }
 
   const isSubmitDisabled = !watch('task')
@@ -79,14 +100,39 @@ export function Home() {
   const seconds = String(secondsAmount).padStart(2, '0')
 
   useEffect(() => {
+    let interval: number
+
     if (activeCycle) {
-      setInterval(() => {
-        setTotalSecondsPassed(
-          differenceInSeconds(new Date(), activeCycle.startDate),
+      interval = setInterval(() => {
+        const secondsDifference = differenceInSeconds(
+          new Date(),
+          activeCycle.startDate,
         )
+
+        if (secondsDifference >= totalSeconds) {
+          setCycles((state) =>
+            state.map((cycle) => {
+              if (cycle.id === activeCycleId) {
+                return {
+                  ...cycle,
+                  finishedDate: new Date(),
+                }
+              } else {
+                return cycle
+              }
+            }),
+          )
+
+          setTotalSecondsPassed(totalSeconds)
+          clearInterval(interval)
+        } else {
+          setTotalSecondsPassed(secondsDifference)
+        }
       }, 1000)
     }
-  }, [activeCycle])
+
+    return () => clearInterval(interval)
+  }, [activeCycle, totalSeconds, activeCycleId])
 
   return (
     <HomeContainer>
@@ -97,6 +143,7 @@ export function Home() {
             id="task"
             list="task-suggestions"
             placeholder="Dê um nome para o seu projeto"
+            disabled={!!activeCycle}
             {...register('task')}
           />
 
@@ -115,6 +162,7 @@ export function Home() {
             step={5}
             min={5}
             max={60}
+            disabled={!!activeCycle}
             {...register('durationInMinutes', { valueAsNumber: true })}
           />
 
@@ -129,10 +177,17 @@ export function Home() {
           <span>{seconds[1]}</span>
         </CountdownContainer>
 
-        <StartCountdownButton type="submit" disabled={isSubmitDisabled}>
-          <Play size={24} />
-          Começar
-        </StartCountdownButton>
+        {activeCycle ? (
+          <StopCountdownButton type="button" onClick={handleInterruptCycle}>
+            <HandPalm size={24} />
+            Interromper
+          </StopCountdownButton>
+        ) : (
+          <StartCountdownButton type="submit" disabled={isSubmitDisabled}>
+            <Play size={24} />
+            Começar
+          </StartCountdownButton>
+        )}
       </form>
     </HomeContainer>
   )
